@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: k8s-example
+data:
+  REACT_APP_BACKEND_URL: "http://api.k8s-example.local"
