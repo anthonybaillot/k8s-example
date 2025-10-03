@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: k8s-example-staging
+  namespace: argocd
+  labels:
+    environment: staging
+    project: k8s-example
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: k8s-example
+
+  source:
+    repoURL: https://github.com/your-org/k8s-example
+    targetRevision: main
+    path: helm/k8s-example
+    helm:
+      valueFiles:
+      - values.yaml
+      - values-staging.yaml
+      parameters:
+      - name: database.image.tag
+        value: main
+      - name: backend.image.tag
+        value: main
+      - name: frontend.image.tag
+        value: main
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: k8s-example-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health check configuration
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas
+
+  # Notification configuration
+  revisionHistoryLimit: 10

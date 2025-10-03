@@ -1,0 +1,18 @@
+{{- if .Values.database.storage.size }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.database.name }}-pvc
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "k8s-example.database.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.database.storage.size }}
+  {{- if .Values.database.storage.storageClass }}
+  storageClassName: {{ .Values.database.storage.storageClass }}
+  {{- end }}
+{{- end }}

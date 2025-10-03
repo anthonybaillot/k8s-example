@@ -1,0 +1,67 @@
+# Staging environment values
+global:
+  namespace: k8s-example-staging
+  imagePullPolicy: IfNotPresent
+
+# Production-like resources for staging
+database:
+  replicas: 1
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+backend:
+  replicas: 2
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "400m"
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+
+frontend:
+  replicas: 2
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "300m"
+
+# Staging-specific configuration
+config:
+  frontend:
+    backendUrl: "https://api.k8s-example-staging.com"
+
+ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: k8s-example-staging.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+    - host: api.k8s-example-staging.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: backend
+  tls:
+    - secretName: k8s-example-staging-tls
+      hosts:
+        - k8s-example-staging.com
+        - api.k8s-example-staging.com

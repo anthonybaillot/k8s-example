@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: k8s-example-prod
+  namespace: argocd
+  labels:
+    environment: production
+    project: k8s-example
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: production-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: production-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: k8s-example
+
+  source:
+    repoURL: https://github.com/your-org/k8s-example
+    targetRevision: main
+    path: helm/k8s-example
+    helm:
+      valueFiles:
+      - values.yaml
+      - values-prod.yaml
+      parameters:
+      - name: database.image.tag
+        value: main
+      - name: backend.image.tag
+        value: main
+      - name: frontend.image.tag
+        value: main
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: k8s-example-prod
+
+  syncPolicy:
+    # Manual sync for production
+    automated: null
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+  # Health check configuration
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas
+
+  # Notification configuration
+  revisionHistoryLimit: 20

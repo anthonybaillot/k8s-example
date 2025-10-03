@@ -1,0 +1,127 @@
+# Default values for k8s-example
+# This is a YAML-formatted file.
+
+global:
+  namespace: k8s-example
+  imagePullPolicy: IfNotPresent
+
+# Database configuration
+database:
+  name: database
+  image:
+    repository: k8s-database
+    tag: latest
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 5432
+    targetPort: 5432
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  env:
+    POSTGRES_DB: myapp
+    POSTGRES_USER: postgres
+  storage:
+    size: 1Gi
+    storageClass: ""
+
+# Backend configuration
+backend:
+  name: backend
+  image:
+    repository: k8s-backend
+    tag: latest
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  probes:
+    livenessProbe:
+      path: /health
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    readinessProbe:
+      path: /health
+      initialDelaySeconds: 5
+      periodSeconds: 5
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+# Frontend configuration
+frontend:
+  name: frontend
+  image:
+    repository: k8s-frontend
+    tag: latest
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  probes:
+    livenessProbe:
+      path: /
+      initialDelaySeconds: 60
+      periodSeconds: 10
+    readinessProbe:
+      path: /
+      initialDelaySeconds: 30
+      periodSeconds: 10
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  hosts:
+    - host: k8s-example.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+    - host: api.k8s-example.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: backend
+  tls: []
+
+# Application configuration
+config:
+  database:
+    host: database-service
+    name: myapp
+    user: postgres
+    port: "5432"
+  backend:
+    url: "http://backend-service:8000"
+  frontend:
+    backendUrl: "http://localhost:8000"
+
+# Secrets (base64 encoded values)
+secrets:
+  database:
+    password: "cG9zdGdyZXM="  # postgres

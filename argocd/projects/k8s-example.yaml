@@ -1,0 +1,75 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: k8s-example
+  namespace: argocd
+spec:
+  description: K8s Example Application Project
+
+  # Source repositories
+  sourceRepos:
+  - 'https://github.com/your-org/k8s-example'
+  - 'https://charts.your-org.com'  # If using private Helm registry
+
+  # Destination clusters and namespaces
+  destinations:
+  - namespace: 'k8s-example-dev'
+    server: https://kubernetes.default.svc
+  - namespace: 'k8s-example-staging'
+    server: https://kubernetes.default.svc
+  - namespace: 'k8s-example-prod'
+    server: https://kubernetes.default.svc
+
+  # Cluster resource whitelist
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: 'networking.k8s.io'
+    kind: Ingress
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+
+  # Namespace resource whitelist
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Secret
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: PersistentVolumeClaim
+  - group: 'apps'
+    kind: Deployment
+  - group: 'autoscaling'
+    kind: HorizontalPodAutoscaler
+  - group: 'networking.k8s.io'
+    kind: Ingress
+
+  # Roles for this project
+  roles:
+  - name: admin
+    description: Admin access to k8s-example applications
+    policies:
+    - p, proj:k8s-example:admin, applications, *, k8s-example/*, allow
+    - p, proj:k8s-example:admin, repositories, *, *, allow
+    groups:
+    - k8s-example:admins
+
+  - name: developer
+    description: Developer access to k8s-example applications
+    policies:
+    - p, proj:k8s-example:developer, applications, get, k8s-example/*, allow
+    - p, proj:k8s-example:developer, applications, sync, k8s-example/*-dev, allow
+    - p, proj:k8s-example:developer, applications, sync, k8s-example/*-staging, allow
+    groups:
+    - k8s-example:developers
+
+  - name: readonly
+    description: Read-only access to k8s-example applications
+    policies:
+    - p, proj:k8s-example:readonly, applications, get, k8s-example/*, allow
+    groups:
+    - k8s-example:viewers

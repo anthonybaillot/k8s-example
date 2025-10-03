@@ -1,0 +1,179 @@
+# GitLab CI/CD Pipeline for K8s Example App
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  REGISTRY: $CI_REGISTRY
+  IMAGE_PREFIX: $CI_PROJECT_PATH
+
+stages:
+  - test
+  - build
+  - security
+  - deploy-dev
+  - deploy-staging
+  - deploy-prod
+
+# Test Jobs
+test-backend:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - cd services/backend
+    - pip install -r requirements.txt
+  script:
+    - python -m pytest
+    - flake8 . || true
+  coverage: '/TOTAL.+ ([0-9]{1,3}%)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: services/backend/coverage.xml
+
+test-frontend:
+  stage: test
+  image: node:18-alpine
+  before_script:
+    - cd services/frontend
+    - npm ci
+  script:
+    - npm test -- --coverage --watchAll=false
+    - npm run lint
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: services/frontend/coverage/cobertura-coverage.xml
+
+# Build Jobs
+.build-template: &build-template
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - |
+      docker build \
+        --tag $CI_REGISTRY_IMAGE-$SERVICE:$CI_COMMIT_SHA \
+        --tag $CI_REGISTRY_IMAGE-$SERVICE:$CI_COMMIT_REF_SLUG \
+        ./services/$SERVICE/
+    - docker push $CI_REGISTRY_IMAGE-$SERVICE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE-$SERVICE:$CI_COMMIT_REF_SLUG
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+build-database:
+  <<: *build-template
+  variables:
+    SERVICE: database
+
+build-backend:
+  <<: *build-template
+  variables:
+    SERVICE: backend
+
+build-frontend:
+  <<: *build-template
+  variables:
+    SERVICE: frontend
+
+# Security Scanning
+security-scan:
+  stage: security
+  image: aquasec/trivy:latest
+  script:
+    - trivy fs --format template --template "@contrib/gitlab.tpl" -o gl-sast-report.json .
+  artifacts:
+    reports:
+      sast: gl-sast-report.json
+  rules:
+    - if: '$CI_MERGE_REQUEST_ID'
+
+container-scan:
+  stage: security
+  image: aquasec/trivy:latest
+  script:
+    - trivy image --format template --template "@contrib/gitlab.tpl" -o gl-container-scanning-report.json $CI_REGISTRY_IMAGE-backend:$CI_COMMIT_SHA
+  artifacts:
+    reports:
+      container_scanning: gl-container-scanning-report.json
+  dependencies:
+    - build-backend
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+# Deployment Jobs
+.deploy-template: &deploy-template
+  image: alpine/helm:3.12.0
+  before_script:
+    - apk add --no-cache curl
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    - mkdir -p ~/.kube
+    - echo "$KUBECONFIG_CONTENT" | base64 -d > ~/.kube/config
+    - chmod 600 ~/.kube/config
+  script:
+    - export IMAGE_TAG=$CI_COMMIT_SHA
+    - ./helm-deploy.sh $ENVIRONMENT
+
+deploy-dev:
+  <<: *deploy-template
+  stage: deploy-dev
+  environment:
+    name: development
+    url: http://k8s-example-dev.local
+  variables:
+    ENVIRONMENT: dev
+    KUBECONFIG_CONTENT: $KUBECONFIG_DEV
+  dependencies:
+    - build-database
+    - build-backend
+    - build-frontend
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy-staging:
+  <<: *deploy-template
+  stage: deploy-staging
+  environment:
+    name: staging
+    url: https://k8s-example-staging.com
+  variables:
+    ENVIRONMENT: staging
+    KUBECONFIG_CONTENT: $KUBECONFIG_STAGING
+  dependencies:
+    - build-database
+    - build-backend
+    - build-frontend
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy-prod:
+  <<: *deploy-template
+  stage: deploy-prod
+  environment:
+    name: production
+    url: https://k8s-example.com
+  variables:
+    ENVIRONMENT: prod
+    KUBECONFIG_CONTENT: $KUBECONFIG_PROD
+  dependencies:
+    - build-database
+    - build-backend
+    - build-frontend
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Cleanup old images (weekly)
+cleanup-registry:
+  stage: deploy-prod
+  image: alpine:latest
+  script:
+    - echo "Cleanup would run here - remove old container images"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.frontend.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "k8s-example.frontend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels:
+      {{- include "k8s-example.frontend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "k8s-example.frontend.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: react
+        image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.frontend.service.targetPort }}
+        env:
+        - name: REACT_APP_BACKEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REACT_APP_BACKEND_URL
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.frontend.probes.livenessProbe.path }}
+            port: {{ .Values.frontend.service.targetPort }}
+          initialDelaySeconds: {{ .Values.frontend.probes.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.frontend.probes.livenessProbe.periodSeconds }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.frontend.probes.readinessProbe.path }}
+            port: {{ .Values.frontend.service.targetPort }}
+          initialDelaySeconds: {{ .Values.frontend.probes.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.frontend.probes.readinessProbe.periodSeconds }}
+        resources:
+          {{- toYaml .Values.frontend.resources | nindent 10 }}

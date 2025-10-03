@@ -1,0 +1,17 @@
+apiVersion: v2
+name: k8s-example
+description: A Helm chart for K8s Example Application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - microservices
+  - postgres
+  - fastapi
+  - react
+home: https://github.com/your-org/k8s-example
+sources:
+  - https://github.com/your-org/k8s-example
+maintainers:
+  - name: Your Name
+    email: your.email@example.com
